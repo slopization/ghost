@@ -11,6 +11,7 @@ interface ResetAuthenticationArgs {
   models?: any;
   internalKeys?: InternalKeys;
   deleteAllSessions?: () => Promise<void>;
+  lockStaffUsers?: boolean;
 }
 
 interface ResetAuthenticationResult {
@@ -36,6 +37,7 @@ export default async function resetAuthentication({
   models = modelsDefault,
   internalKeys = internalKeysDefault.service,
   deleteAllSessions = deleteAllSessionsDefault,
+  lockStaffUsers = true,
 }: ResetAuthenticationArgs): Promise<ResetAuthenticationResult> {
   const previousSchedulerKey = await internalKeys.get('ghost-scheduler');
   const actorId = options?.context?.user ?? null;
@@ -45,7 +47,9 @@ export default async function resetAuthentication({
       const txOptions = Object.assign({}, options, { transacting: tx });
 
       const { count: rotated } = await models.ApiKey.refreshAllSecrets(txOptions);
-      const { count: locked } = await userService.lockAll(txOptions);
+      const { count: locked } = lockStaffUsers
+        ? await userService.lockAll(txOptions)
+        : { count: 0 };
 
       if (actorId) {
         await models.Action.add(

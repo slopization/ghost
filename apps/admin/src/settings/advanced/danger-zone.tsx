@@ -19,6 +19,8 @@ import { useQueryClient } from '@tryghost/admin-x-framework';
 import { useRemoveAllGiftLinks } from '@tryghost/admin-x-framework/api/gift-links';
 import { useResetAuth } from '@tryghost/admin-x-framework/api/security';
 import { withErrorBoundary } from '@/settings/components/with-error-boundary';
+import { useGlobalData } from '@/settings/providers/global-data-context';
+import { getStaffAuthentication } from '@tryghost/admin-x-framework/helpers';
 
 const DangerZone: React.FC<{ keywords: string[] }> = ({ keywords }) => {
   const { mutateAsync: deleteAllContent } = useDeleteAllContent();
@@ -28,12 +30,17 @@ const DangerZone: React.FC<{ keywords: string[] }> = ({ keywords }) => {
   const handleError = useHandleError();
   const { totalUsers } = useStaffUsers();
   const { confirm } = useConfirmation();
+  const { siteData } = useGlobalData();
+  const staffAuthentication = getStaffAuthentication(siteData);
+  const oidcMode = staffAuthentication.mode === 'oidc';
+  const providerName = oidcMode ? staffAuthentication.provider_name : 'your identity provider';
 
-  const resetAuthStaffSentence =
-    totalUsers === 1
+  const resetAuthStaffSentence = oidcMode
+    ? `All staff users, including you, will be signed out and must sign in again with ${providerName}. Credentials and sessions at ${providerName} are not changed.`
+    : totalUsers === 1
       ? 'You will be signed out and must reset your password before signing back in.'
       : totalUsers > 1
-        ? `All ${totalUsers} staff users, including you, will be signed out and must reset their password before signing back in.`
+        ? `All ${formatNumber(totalUsers)} staff users, including you, will be signed out and must reset their password before signing back in.`
         : 'All staff users, including you, will be signed out and must reset their password before signing back in.';
 
   const handleDeleteAllContent = () => {
@@ -78,7 +85,9 @@ const DangerZone: React.FC<{ keywords: string[] }> = ({ keywords }) => {
           const keys = result?.api_keys_rotated ?? 0;
           const users = result?.users_locked ?? 0;
           toast.success(
-            `Rotated ${formatNumber(keys)} API ${keys === 1 ? 'key' : 'keys'} and locked ${formatNumber(users)} ${users === 1 ? 'user' : 'users'}. You will be signed out shortly.`,
+            oidcMode
+              ? `Rotated ${formatNumber(keys)} API ${keys === 1 ? 'key' : 'keys'} and signed out all staff users. Sign in again with ${providerName}.`
+              : `Rotated ${formatNumber(keys)} API ${keys === 1 ? 'key' : 'keys'} and locked ${formatNumber(users)} ${users === 1 ? 'user' : 'users'}. You will be signed out shortly.`,
           );
           modal?.remove();
           window.location.href = getGhostPaths().adminRoot;
@@ -143,8 +152,9 @@ const DangerZone: React.FC<{ keywords: string[] }> = ({ keywords }) => {
           <ActionListItemContent className="py-3 pr-6">
             <div>Reset all authentication</div>
             <div className="text-sm text-muted-foreground">
-              Rotate every API key, sign out every staff user, and require a password reset. Use
-              after a suspected credential compromise.
+              {oidcMode
+                ? `Rotate every API key and sign out every staff user. Staff must sign in again with ${providerName}.`
+                : 'Rotate every API key, sign out every staff user, and require a password reset. Use after a suspected credential compromise.'}
             </div>
           </ActionListItemContent>
           <ActionListItemActions>

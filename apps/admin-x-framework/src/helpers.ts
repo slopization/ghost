@@ -6,3 +6,8 @@ export {
   handleSessionExpiry,
   holdSessionExpiryRedirect,
 } from './utils/api/fetch-api';
+export {
+  buildOidcStartUrl,
+  getStaffAuthentication,
+  isOidcOnlyAuthentication,
+} from './utils/staff-authentication';

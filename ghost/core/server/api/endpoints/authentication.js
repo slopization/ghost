@@ -10,6 +10,8 @@ const invites = require('../../services/invites').default;
 const usersService = require('../../services/users').default;
 const adapterManager = require('../../services/adapter-manager').default;
 const schedulerAdapter = adapterManager.getAdapter('scheduling');
+const staffAuthPolicy = require('../../auth/staff-auth-policy');
+const { generatePassword } = require('../../lib/generate-password');
 
 async function destroyRequestSession(req) {
   if (!req || !req.session) {
@@ -38,6 +40,7 @@ const controller = {
       docName: 'setup',
     },
     query(frame) {
+      staffAuthPolicy.assertPasswordAuthenticationAllowed();
       return Promise.resolve()
         .then(() => {
           return auth.setup.assertSetupCompleted(false)();
@@ -99,6 +102,7 @@ const controller = {
       docName: 'setup',
     },
     async query(frame) {
+      staffAuthPolicy.assertPasswordAuthenticationAllowed();
       await auth.setup.assertSetupCompleted(true)();
 
       const setupDetails = {
@@ -147,6 +151,7 @@ const controller = {
     permissions: true,
     options: ['email'],
     async query(frame) {
+      staffAuthPolicy.assertPasswordAuthenticationAllowed();
       await auth.setup.assertSetupCompleted(true)();
       const token = await auth.passwordreset.generateToken(
         frame.data.password_reset[0].email,
@@ -170,6 +175,7 @@ const controller = {
     permissions: false,
     options: ['ip'],
     async query(frame) {
+      staffAuthPolicy.assertPasswordAuthenticationAllowed();
       await auth.setup.assertSetupCompleted(true)();
       const { options, tokenParts } = await auth.passwordreset.extractTokenParts(frame);
       const internalOptions = Object.assign(options, { context: { internal: true } });
@@ -212,6 +218,12 @@ const controller = {
     permissions: false,
     async query(frame) {
       await auth.setup.assertSetupCompleted(true)();
+      const policy = staffAuthPolicy.getStaffAuthPolicy();
+      if (policy.mode === 'oidc') {
+        return invites.service.accept({
+          invitation: [{ ...frame.data.invitation[0], password: generatePassword('') }],
+        });
+      }
       return invites.service.accept(frame.data);
     },
   },
@@ -243,6 +255,7 @@ const controller = {
         schedulerAdapter,
         userService: usersService.service,
         options: frame.options,
+        lockStaffUsers: staffAuthPolicy.getStaffAuthPolicy().mode !== 'oidc',
       });
 
       // Express-session would otherwise re-save the current request's

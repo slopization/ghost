@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet } from '@tryghost/admin-x-framework';
 import { useBrowseSettings } from '@tryghost/admin-x-framework/api/settings';
 import { useCurrentUser } from '@tryghost/admin-x-framework/api/current-user';
@@ -20,7 +20,7 @@ import { useGlobalShortcuts } from './global-shortcuts/global-shortcuts';
 import { useAccentColorProperties } from './hooks/use-accent-color-properties';
 import { useDocumentTitle } from './hooks/use-document-title';
 import { usePrivateSiteLogin } from './hooks/use-private-site-login';
-import { SignedOutApp, useAuthNotice } from './auth/api';
+import { clearSigninRedirect, SignedOutApp, useAuthNotice } from './auth/api';
 import { useSentry } from './sentry';
 import { BootError, BootLoader } from './boot-states';
 
@@ -31,6 +31,11 @@ function App() {
   const isSignedOut = !currentUser && errorUpdatedAt > 0;
   const bootError = !currentUser && error && !(error instanceof UnauthorizedError) ? error : null;
   const [alerts] = useState(createAlertsStore);
+  useEffect(() => {
+    if (currentUser) {
+      clearSigninRedirect();
+    }
+  }, [currentUser]);
   useSentry();
   // Warm the settings cache at boot (as the removed AppProvider did): screens
   // hold on settings, and resolving it before routes mount keeps route guards

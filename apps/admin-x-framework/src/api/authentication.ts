@@ -30,7 +30,7 @@ export interface AcceptInvitationPayload {
   token: string;
   name: string;
   email: string;
-  password: string;
+  password?: string;
 }
 
 export interface CompleteSetupPayload {

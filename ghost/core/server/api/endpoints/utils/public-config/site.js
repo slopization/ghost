@@ -2,6 +2,7 @@ const ghostVersion = require('@tryghost/version');
 const settingsCache = require('../../../../../shared/settings-cache');
 const config = require('../../../../../shared/config');
 const urlUtils = require('../../../../../shared/url-utils').default;
+const staffOidc = require('../../../../../server/auth/oidc').default;
 
 module.exports = function getSiteProperties() {
   const siteProperties = {
@@ -22,6 +23,7 @@ module.exports = function getSiteProperties() {
         settingsCache.get('portal_signup_terms_html')
       ),
     site_uuid: settingsCache.get('site_uuid'),
+    staff_authentication: staffOidc.extras.getPublicDescriptor(),
   };
 
   if (config.get('client_sentry') && !config.get('client_sentry').disabled) {

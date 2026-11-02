@@ -161,6 +161,11 @@ async function initCore({ ghostServer, config }) {
   await i18n.init({ events: require('./server/lib/common/events') });
   debug('End: i18n');
 
+  debug('Begin: Staff OIDC');
+  const staffOidc = require('./server/auth/oidc').default;
+  await staffOidc.init();
+  debug('End: Staff OIDC');
+
   // Gift links service: wires the (knex-backed) repository once the DB is ready.
   debug('Begin: Gift Links Service');
   const giftLinksService = require('./server/services/gift-links').default;

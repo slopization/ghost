@@ -17,6 +17,7 @@ const EXEMPT_PATH_PATTERNS = [
   /\/\.ghost(?:\/|$)/,
   /\/\.well-known(?:\/|$)/,
   /\/socket\.io(?:\/|$)/,
+  /\/ghost\/auth\/oidc\/(?:start|callback)\/?$/i,
 ];
 const MAX_LOGGED_PARAMETERS = 10;
 const REQUEST_URL_BASE = 'http://ignored.example';

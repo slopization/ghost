@@ -3,6 +3,16 @@ import { Config, hasSendingDomain, isManagedEmail, sendingDomain } from './confi
 
 // Types
 
+export type StaffAuthentication =
+  | { mode: 'password' }
+  | {
+      mode: 'oidc';
+      status: 'ready' | 'unavailable';
+      provider_name: string;
+      start_url: string;
+    }
+  | { mode: 'unavailable' };
+
 export type SiteData = {
   title: string;
   description: string;
@@ -17,6 +27,7 @@ export type SiteData = {
   /** Present only when the server has client error reporting configured. */
   sentry_dsn?: string;
   sentry_env?: string;
+  staff_authentication?: StaffAuthentication;
 };
 
 export interface SiteResponseType {

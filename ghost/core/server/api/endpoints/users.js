@@ -5,6 +5,7 @@ const permissionsService = require('../../services/permissions');
 const auth = require('../../auth');
 const { restrictAdminApiQueryOptions } = require('./utils/api-filter-utils');
 const usersService = require('../../services/users').default;
+const staffAuthPolicy = require('../../auth/staff-auth-policy');
 const ALLOWED_INCLUDES = ['count.posts', 'permissions', 'roles', 'roles.permissions'];
 const UNSAFE_ATTRS = ['status', 'roles'];
 
@@ -228,6 +229,7 @@ const controller = {
       },
     },
     async query(frame) {
+      staffAuthPolicy.assertPasswordAuthenticationAllowed();
       const result = await models.User.changePassword(frame.data.password[0], frame.options);
       await rotateSessionForSelfPasswordChange(frame, result);
       return result;

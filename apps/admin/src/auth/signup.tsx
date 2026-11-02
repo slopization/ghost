@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { Navigate, useNavigate, useParams } from '@tryghost/admin-x-framework';
 import { useBrowseSite } from '@tryghost/admin-x-framework/api/site';
+import { getStaffAuthentication } from '@tryghost/admin-x-framework/helpers';
 import { Field, FieldError, FieldLabel, Input } from '@tryghost/shade/components';
 import { Stack } from '@tryghost/shade/primitives';
 import { toast } from 'sonner';
@@ -8,7 +9,7 @@ import { describeUnexpectedError, useAuthClient, useInvitation } from './client/
 import { AuthHeader, AuthLayout, FlowMessage, SubmitButton, type SubmitState } from './auth-layout';
 import { passwordProblems } from './password-rules';
 import { reloadAdmin } from './reload';
-import { takeSigninRedirect } from './signin-redirect';
+import { peekSigninRedirect, takeSigninRedirect } from './signin-redirect';
 
 type SignupField = 'name' | 'password';
 
@@ -42,7 +43,10 @@ export default function Signup() {
 function SignupForm({ email, token }: { email: string; token: string }) {
   const authClient = useAuthClient();
   const navigate = useNavigate();
-  const { data: siteData } = useBrowseSite({ defaultErrorHandler: false });
+  const site = useBrowseSite({ defaultErrorHandler: false });
+  const siteData = site.data;
+  const staffAuthentication = siteData ? getStaffAuthentication(siteData.site) : undefined;
+  const oidcMode = staffAuthentication?.mode === 'oidc';
 
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -50,11 +54,20 @@ function SignupForm({ email, token }: { email: string; token: string }) {
   const [flowError, setFlowError] = useState('');
   const [submitState, setSubmitState] = useState<SubmitState>('idle');
 
+  if (site.isLoading) {
+    return null;
+  }
+  if (!siteData || staffAuthentication?.mode === 'unavailable') {
+    return <Navigate to="/signin" replace />;
+  }
+
   const problemWith = (field: SignupField, values = { name, password }) => {
     if (field === 'name') {
       return values.name ? undefined : 'Enter a name.';
     }
-    return passwordProblems(values.password, { email, siteTitle: siteData?.site.title })[0];
+    return oidcMode
+      ? undefined
+      : passwordProblems(values.password, { email, siteTitle: siteData?.site.title })[0];
   };
 
   const validateField = (field: SignupField, values?: { name: string; password: string }) =>
@@ -75,13 +88,26 @@ function SignupForm({ email, token }: { email: string; token: string }) {
     setSubmitState('running');
     let accountCreated = false;
     try {
-      const accepted = await authClient.invitation.accept({ token, name, password });
+      const accepted = await authClient.invitation.accept({
+        token,
+        name,
+        password: oidcMode ? undefined : password,
+      });
       if (accepted.error) {
         setFlowError(accepted.error.message ?? '');
         setSubmitState('failed');
         return;
       }
       accountCreated = true;
+
+      if (oidcMode) {
+        if (staffAuthentication.status === 'ready') {
+          authClient.signIn.oidc({ returnTo: peekSigninRedirect() });
+        } else {
+          navigate('/signin', { replace: true });
+        }
+        return;
+      }
 
       const { data, error } = await authClient.signIn.email({ email, password });
       if (data && 'twoFactorRedirect' in data) {
@@ -147,23 +173,25 @@ function SignupForm({ email, token }: { email: string; token: string }) {
             />
             <FieldError className="text-base">{errors.name}</FieldError>
           </Field>
-          <Field data-invalid={Boolean(errors.password) || undefined}>
-            <FieldLabel htmlFor="password">Password</FieldLabel>
-            <Input
-              aria-invalid={Boolean(errors.password) || undefined}
-              autoComplete="new-password"
-              autoCorrect="off"
-              data-test-input="password"
-              id="password"
-              name="password"
-              placeholder="At least 10 characters"
-              type="password"
-              value={password}
-              onBlur={() => validateField('password')}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-            <FieldError className="text-base">{errors.password}</FieldError>
-          </Field>
+          {!oidcMode && (
+            <Field data-invalid={Boolean(errors.password) || undefined}>
+              <FieldLabel htmlFor="password">Password</FieldLabel>
+              <Input
+                aria-invalid={Boolean(errors.password) || undefined}
+                autoComplete="new-password"
+                autoCorrect="off"
+                data-test-input="password"
+                id="password"
+                name="password"
+                placeholder="At least 10 characters"
+                type="password"
+                value={password}
+                onBlur={() => validateField('password')}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              <FieldError className="text-base">{errors.password}</FieldError>
+            </Field>
+          )}
           <SubmitButton
             label="Create Account →"
             runningLabel="Creating"

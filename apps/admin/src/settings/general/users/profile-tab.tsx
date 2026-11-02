@@ -13,12 +13,19 @@ import { SettingGroup, SettingGroupContent } from '@tryghost/shade/patterns';
 import { type UserDetailProps } from '@/settings/general/user-detail-modal';
 import { formatNumber } from '@tryghost/shade/utils';
 import { getHomepageUrl } from '@tryghost/admin-x-framework/api/site';
+import { getStaffAuthentication } from '@tryghost/admin-x-framework/helpers';
 import { hasAdminAccess } from '@tryghost/admin-x-framework/api/users';
 import { useGlobalData } from '@/settings/providers/global-data-context';
 
 const BasicInputs: React.FC<UserDetailProps> = ({ errors, clearError, user, setUserData }) => {
   const { currentUser, siteData } = useGlobalData();
   const homepageUrl = getHomepageUrl(siteData);
+  const staffAuthentication = getStaffAuthentication(siteData);
+  const externalAuthentication = staffAuthentication.mode !== 'password';
+  const providerName =
+    staffAuthentication.mode === 'oidc'
+      ? staffAuthentication.provider_name
+      : 'your identity provider';
 
   return (
     <SettingGroupContent>
@@ -35,10 +42,21 @@ const BasicInputs: React.FC<UserDetailProps> = ({ errors, clearError, user, setU
         {errors?.email ? (
           <FieldError>{errors.email}</FieldError>
         ) : (
-          <FieldDescription>Used for notifications</FieldDescription>
+          <FieldDescription>
+            {externalAuthentication
+              ? `Used to match this staff account with ${providerName}`
+              : 'Used for notifications'}
+          </FieldDescription>
         )}
       </Field>
-      <ChangePasswordForm user={user} />
+      {externalAuthentication ? (
+        <Field>
+          <FieldLabel>Authentication</FieldLabel>
+          <FieldDescription>Sign-in credentials are managed by {providerName}.</FieldDescription>
+        </Field>
+      ) : (
+        <ChangePasswordForm user={user} />
+      )}
       {hasAdminAccess(currentUser) && <RoleSelector setUserData={setUserData} user={user} />}
       <Field data-invalid={Boolean(errors?.name) || undefined}>
         <FieldLabel htmlFor="staff-name">Full name</FieldLabel>

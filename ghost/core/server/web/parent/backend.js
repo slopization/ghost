@@ -14,6 +14,7 @@ module.exports = () => {
 
   backendApp.lazyUse(BASE_API_PATH, require('../api'));
   backendApp.lazyUse('/ghost/.well-known', require('../well-known'));
+  backendApp.lazyUse('/ghost/auth/oidc', () => require('../admin/oidc/router').createOidcRouter());
 
   backendApp.use(
     '/ghost',

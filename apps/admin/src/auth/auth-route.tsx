@@ -1,6 +1,8 @@
 import { createContext, lazy, Suspense, useContext, useEffect } from 'react';
 import { Navigate, Outlet, useLocation } from '@tryghost/admin-x-framework';
 import { isAuthPath } from '@tryghost/admin-x-framework/helpers';
+import { getStaffAuthentication } from '@tryghost/admin-x-framework/helpers';
+import { useBrowseSite } from '@tryghost/admin-x-framework/api/site';
 import { toast } from 'sonner';
 import { useSetupStatus } from './client/auth-client';
 import { rememberSigninRedirect } from './signin-redirect';
@@ -59,17 +61,47 @@ export function AuthRoute({ screen }: { screen: AuthScreen }) {
 export function SignedOutApp() {
   const { pathname, search } = useLocation();
   const setup = useSetupStatus();
+  const site = useBrowseSite({ defaultErrorHandler: false });
   const route = pathname.replace(/\/$/, '') || '/';
 
   if (!isAuthPath(pathname)) {
     rememberSigninRedirect(pathname + search);
     return <Navigate to="/signin" replace />;
   }
-  if (setup.isPending) {
+  if (setup.isPending || site.isLoading) {
     return null;
   }
-  if (setup.data && !setup.data.isSetup && route !== '/setup' && route !== '/signout') {
+  if (site.isError && route !== '/signin' && route !== '/signout') {
+    return <Navigate to="/signin" replace />;
+  }
+  const authentication = site.data ? getStaffAuthentication(site.data.site) : undefined;
+  const passwordMode = authentication?.mode === 'password';
+  if (
+    authentication &&
+    !passwordMode &&
+    ['/reset', '/signin/verify', '/setup'].some(
+      (path) => route === path || route.startsWith(`${path}/`),
+    )
+  ) {
+    return <Navigate to="/signin" replace />;
+  }
+  if (
+    setup.data &&
+    !setup.data.isSetup &&
+    passwordMode &&
+    route !== '/setup' &&
+    route !== '/signout'
+  ) {
     return <Navigate to="/setup" replace />;
+  }
+  if (
+    setup.data &&
+    !setup.data.isSetup &&
+    !passwordMode &&
+    route !== '/signin' &&
+    route !== '/signout'
+  ) {
+    return <Navigate to="/signin" replace />;
   }
   return (
     <SignedOutContext.Provider value={true}>

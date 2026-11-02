@@ -40,6 +40,7 @@ const AUTH_CODE_CHALLENGE_BYTES = 16;
  * @prop {(req: Req, res: Res) => Promise<User | null>} getUserForSession
  * @prop {(req: Req, res: Res) => Promise<void>} removeUserForSession
  * @prop {(req: Req, res: Res, user: User) => Promise<void>} createSessionForUser
+ * @prop {(req: Req, res: Res, user: User, context: {providerKey: string}) => Promise<void>} createOidcSessionForUser
  * @prop {(req: Req, res: Res) => Promise<void>} createVerifiedSessionForUser
  * @prop {(options: {session: Session, user: User, origin: string, userAgent?: string, ip?: string}) => Promise<void>} assignVerifiedUserToSession
  * @prop {(req: Req, res: Res) => Promise<void>} verifySession
@@ -60,6 +61,7 @@ const AUTH_CODE_CHALLENGE_BYTES = 16;
  * @param {import('../../../shared/i18n').t} deps.t
  * @param {import('../../../shared/url-utils').default} deps.urlUtils
  * @param {() => boolean} deps.isStaffDeviceVerificationDisabled
+ * @param {() => import('../staff-auth-policy').StaffAuthPolicy} deps.getStaffAuthPolicy
  * @returns {SessionService}
  */
 
@@ -72,6 +74,7 @@ module.exports = function createSessionService({
   mailer,
   urlUtils,
   isStaffDeviceVerificationDisabled,
+  getStaffAuthPolicy = () => ({ mode: 'password' }),
   t,
 }) {
   function createAuthCodeChallenge() {
@@ -268,6 +271,35 @@ module.exports = function createSessionService({
   async function createVerifiedSessionForUser(req, res, user) {
     await createSessionForUser(req, res, user);
     await verifySession(req, res);
+  }
+
+  async function createOidcSessionForUser(req, res, user, context) {
+    await getSession(req, res);
+    await new Promise((resolve, reject) => {
+      req.session.regenerate((err) => (err ? reject(err) : resolve()));
+    });
+
+    const adminUrl = urlUtils.getAdminUrl() || urlUtils.getSiteUrl();
+    const origin = new URL(adminUrl).origin;
+    await assignUserToSession({
+      session: req.session,
+      user,
+      origin,
+      userAgent: req.get('user-agent'),
+      ip: req.ip,
+    });
+    req.session.verified = true;
+    req.session.verified_user_id = user.id;
+    invalidateAuthCodeChallenge(req.session);
+    req.session.authentication = {
+      method: 'oidc',
+      providerKey: context.providerKey,
+      userId: user.id,
+    };
+
+    await new Promise((resolve, reject) => {
+      req.session.save((err) => (err ? reject(err) : resolve()));
+    });
   }
 
   /**
@@ -522,6 +554,7 @@ module.exports = function createSessionService({
     }
 
     invalidateAuthCodeChallenge(session);
+    session.authentication = undefined;
     session.user_id = undefined;
   }
 
@@ -549,6 +582,22 @@ module.exports = function createSessionService({
       return null;
     }
 
+    const policy = getStaffAuthPolicy();
+    if (policy.mode === 'oidc') {
+      if (
+        policy.status !== 'ready' ||
+        !session.authentication ||
+        session.authentication.method !== 'oidc' ||
+        session.authentication.providerKey !== policy.providerKey ||
+        session.authentication.userId !== session.user_id ||
+        session.verified_user_id !== session.user_id
+      ) {
+        return null;
+      }
+    } else if (policy.mode === 'unavailable') {
+      return null;
+    }
+
     try {
       const user = await findUserById({ id: session.user_id });
       return user;
@@ -560,6 +609,7 @@ module.exports = function createSessionService({
   return {
     getUserForSession,
     createSessionForUser,
+    createOidcSessionForUser,
     createVerifiedSessionForUser,
     assignVerifiedUserToSession,
     rotateAndAssignVerifiedUserToSession,

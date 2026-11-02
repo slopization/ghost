@@ -2,6 +2,7 @@ const validator = require('@tryghost/validator');
 const debug = require('@tryghost/debug')('api:endpoints:utils:validators:input:invitation');
 const tpl = require('@tryghost/tpl');
 const errors = require('@tryghost/errors');
+const staffAuthPolicy = require('../../../../../auth/staff-auth-policy');
 
 const messages = {
   noNameProvided: 'No name provided.',
@@ -20,7 +21,7 @@ module.exports = {
       return Promise.reject(new errors.ValidationError({ message: tpl(messages.noTokenProvided) }));
     }
 
-    if (!data.password) {
+    if (!data.password && staffAuthPolicy.getStaffAuthPolicy().mode !== 'oidc') {
       return Promise.reject(
         new errors.ValidationError({ message: tpl(messages.noPasswordProvided) }),
       );

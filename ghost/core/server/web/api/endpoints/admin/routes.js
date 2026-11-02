@@ -447,7 +447,13 @@ module.exports = function apiRoutes() {
     shared.middleware.brute.userLogin,
     http(api.session.add),
   );
-  router.delete('/session', mw.authAdminApi, http(api.session.delete));
+  router.delete(
+    '/session',
+    ...(require('../../../../auth/staff-auth-policy').getStaffAuthPolicy().mode === 'password'
+      ? [mw.authAdminApi]
+      : []),
+    http(api.session.delete),
+  );
   router.post(
     '/session/verify',
     shared.middleware.brute.sendVerificationCode,
@@ -467,6 +473,14 @@ module.exports = function apiRoutes() {
   );
   router.put(
     '/authentication/password_reset',
+    function passwordAuthenticationAllowed(_req, _res, next) {
+      try {
+        require('../../../../auth/staff-auth-policy').assertPasswordAuthenticationAllowed();
+        next();
+      } catch (error) {
+        next(error);
+      }
+    },
     shared.middleware.brute.globalBlock,
     auth.session.initSession,
     http(api.authentication.resetPassword),

@@ -1,7 +1,9 @@
 import { type FormEvent, useState } from 'react';
-import { useNavigate } from '@tryghost/admin-x-framework';
+import { useNavigate, useSearchParams } from '@tryghost/admin-x-framework';
 import { useBrowseSite } from '@tryghost/admin-x-framework/api/site';
+import { getStaffAuthentication } from '@tryghost/admin-x-framework/helpers';
 import {
+  Button,
   Field,
   FieldLabel,
   Input,
@@ -14,15 +16,24 @@ import {
 import { Stack } from '@tryghost/shade/primitives';
 import { toast } from 'sonner';
 import validator from 'validator';
-import { describeUnexpectedError, useAuthClient } from './client/auth-client';
+import { describeUnexpectedError, useAuthClient, useSetupStatus } from './client/auth-client';
 import { AuthHeader, AuthLayout, FlowMessage, SubmitButton, type SubmitState } from './auth-layout';
 import { reloadAdmin } from './reload';
-import { takeSigninRedirect } from './signin-redirect';
+import { peekSigninRedirect, takeSigninRedirect } from './signin-redirect';
+
+const OIDC_ERRORS: Record<string, string> = {
+  oidc_cancelled: 'Sign in was cancelled.',
+  oidc_invalid_response: 'The identity provider returned an invalid response. Please try again.',
+  oidc_access_denied: 'This account does not have access to Ghost Admin.',
+  oidc_unavailable: 'Single sign-on is temporarily unavailable. Please try again later.',
+};
 
 export default function Signin() {
   const authClient = useAuthClient();
   const navigate = useNavigate();
-  const { data: siteData } = useBrowseSite({ defaultErrorHandler: false });
+  const site = useBrowseSite({ defaultErrorHandler: false });
+  const setup = useSetupStatus();
+  const [searchParams] = useSearchParams();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,6 +43,71 @@ export default function Signin() {
   const [submitState, setSubmitState] = useState<SubmitState>('idle');
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [resetRequired, setResetRequired] = useState(false);
+  const [oidcNavigationError, setOidcNavigationError] = useState('');
+
+  if (site.isLoading || setup.isPending) {
+    return (
+      <AuthLayout>
+        <Stack align="center">
+          <LoadingIndicator size="md" />
+        </Stack>
+      </AuthLayout>
+    );
+  }
+
+  if (site.isError || !site.data) {
+    return (
+      <AuthLayout>
+        <Stack gap="lg">
+          <AuthHeader title="Unable to load sign in." />
+          <Button onClick={() => void site.refetch()}>Retry</Button>
+        </Stack>
+      </AuthLayout>
+    );
+  }
+
+  const siteData = site.data;
+  const staffAuthentication = getStaffAuthentication(siteData.site);
+  if (staffAuthentication.mode !== 'password') {
+    const error = searchParams.get('error');
+    const errorMessage = error ? OIDC_ERRORS[error] : undefined;
+    const setupRequired = setup.data?.isSetup === false;
+    const ready =
+      staffAuthentication.mode === 'oidc' &&
+      staffAuthentication.status === 'ready' &&
+      !setupRequired;
+    return (
+      <AuthLayout>
+        <Stack gap="lg">
+          <AuthHeader title={siteData.site.title} />
+          {ready ? (
+            <Button
+              size="lg"
+              onClick={() => {
+                try {
+                  authClient.signIn.oidc({ returnTo: peekSigninRedirect() });
+                } catch {
+                  setOidcNavigationError(
+                    'Single sign-on is temporarily unavailable. Please try again later.',
+                  );
+                }
+              }}
+            >
+              Sign in with {staffAuthentication.provider_name}
+            </Button>
+          ) : setupRequired ? (
+            <FlowMessage error>
+              Complete the initial site setup before enabling single sign-on.
+            </FlowMessage>
+          ) : (
+            <FlowMessage error>Staff sign in is temporarily unavailable.</FlowMessage>
+          )}
+          {errorMessage && <FlowMessage error>{errorMessage}</FlowMessage>}
+          {oidcNavigationError && <FlowMessage error>{oidcNavigationError}</FlowMessage>}
+        </Stack>
+      </AuthLayout>
+    );
+  }
 
   const signIn = async (event: FormEvent) => {
     event.preventDefault();
@@ -115,7 +191,7 @@ export default function Signin() {
     <AuthLayout>
       <form noValidate onSubmit={(event) => void signIn(event)}>
         <Stack gap="lg">
-          <AuthHeader title={siteData?.site.title} />
+          <AuthHeader title={siteData.site.title} />
           <Field>
             <FieldLabel htmlFor="identification">Email address</FieldLabel>
             <Input

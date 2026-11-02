@@ -6,6 +6,9 @@
     "shutdownTimeout": 60000
   },
   "admin": {
+    "auth": {
+      "mode": "password"
+    },
     "redirects": true,
     "sessionMaxAgeMs": 15552000000
   },

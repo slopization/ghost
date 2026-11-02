@@ -40,6 +40,7 @@ import { useGlobalData } from '@/settings/providers/global-data-context';
 import { useHandleError } from '@tryghost/admin-x-framework/hooks';
 import { useSettingsNavigation } from '@/settings/hooks/use-settings-navigation';
 import { withErrorBoundary } from '@/settings/components/with-error-boundary';
+import { getStaffAuthentication } from '@tryghost/admin-x-framework/helpers';
 
 interface OwnerProps {
   user: User;
@@ -328,7 +329,8 @@ const Users: React.FC<{ keywords: string[]; highlight?: boolean }> = ({
     fetchNextInvitePage,
   } = useStaffUsers();
   const { updateRoute } = useSettingsNavigation();
-  const { settings, config, currentUser } = useGlobalData();
+  const { settings, config, currentUser, siteData } = useGlobalData();
+  const staffAuthentication = getStaffAuthentication(siteData);
 
   const showInviteModal = () => {
     updateRoute('staff/invite');
@@ -464,24 +466,45 @@ const Users: React.FC<{ keywords: string[]; highlight?: boolean }> = ({
         >{`Load more (showing ${formatNumber(invites.length)}/${formatNumber(totalInvites)} invites)`}</Button>
       )}
 
-      {config?.security?.staffDeviceVerification && hasAdminAccess(currentUser) && (
+      {hasAdminAccess(currentUser) && staffAuthentication.mode !== 'password' && (
         <div
           className={`flex flex-col gap-6 ${users.length > 1 || invites.length > 0 ? '-mt-6' : ''}`}
         >
           <Separator />
-          <div className="flex items-baseline justify-between">
-            <div className="flex flex-col">
-              <span className="text-[1.5rem] font-semibold tracking-tight">Security settings</span>
-              <span>Require email 2FA codes to be used on all staff logins</span>
-            </div>
-            <Switch
-              aria-label="Require email 2FA codes on staff logins"
-              checked={require2fa}
-              onCheckedChange={(newValue) => void updateRequire2fa(newValue)}
-            />
+          <div className="flex flex-col">
+            <span className="text-[1.5rem] font-semibold tracking-tight">Security settings</span>
+            <span>
+              Multi-factor authentication is managed by{' '}
+              {staffAuthentication.mode === 'oidc'
+                ? staffAuthentication.provider_name
+                : 'your identity provider'}
+              .
+            </span>
           </div>
         </div>
       )}
+      {config?.security?.staffDeviceVerification &&
+        hasAdminAccess(currentUser) &&
+        staffAuthentication.mode === 'password' && (
+          <div
+            className={`flex flex-col gap-6 ${users.length > 1 || invites.length > 0 ? '-mt-6' : ''}`}
+          >
+            <Separator />
+            <div className="flex items-baseline justify-between">
+              <div className="flex flex-col">
+                <span className="text-[1.5rem] font-semibold tracking-tight">
+                  Security settings
+                </span>
+                <span>Require email 2FA codes to be used on all staff logins</span>
+              </div>
+              <Switch
+                aria-label="Require email 2FA codes on staff logins"
+                checked={require2fa}
+                onCheckedChange={(newValue) => void updateRequire2fa(newValue)}
+              />
+            </div>
+          </div>
+        )}
     </TopLevelGroup>
   );
 };

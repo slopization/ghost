@@ -44,6 +44,7 @@ export type SignInData =
 export interface AuthClient {
   signIn: {
     email(body: { email: string; password: string }): Promise<AuthResult<SignInData>>;
+    oidc(body: { returnTo: string }): void;
   };
   twoFactor: {
     /** Emails a new code, replacing the one sent at sign-in. */
@@ -62,7 +63,7 @@ export interface AuthClient {
     accept(body: {
       token: string;
       name: string;
-      password: string;
+      password?: string;
     }): Promise<AuthResult<{ status: true }>>;
   };
   setup: {

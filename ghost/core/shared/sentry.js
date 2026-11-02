@@ -2,6 +2,35 @@ const config = require('./config');
 const SentryKnexTracingIntegration = require('./sentry-knex-tracing-integration');
 const sentryConfig = config.get('sentry');
 let _errors;
+const OIDC_PATH = /\/ghost\/auth\/oidc\/(?:start|callback)\/?(?:\?|$)/i;
+
+function sanitizeOidcEvent(event) {
+  const requestUrl = event.request?.url || '';
+  if (!OIDC_PATH.test(requestUrl)) {
+    return event;
+  }
+
+  if (event.request) {
+    event.request.url = requestUrl.split('?')[0];
+    delete event.request.query_string;
+    delete event.request.cookies;
+    if (event.request.headers) {
+      delete event.request.headers.cookie;
+      delete event.request.headers.Cookie;
+      delete event.request.headers['x-original-uri'];
+    }
+  }
+  event.extra = {};
+  event.contexts = {};
+  event.breadcrumbs = [];
+  if (event.exception?.values) {
+    event.exception.values = event.exception.values.map((value) => ({
+      type: value.type,
+      value: 'Staff OIDC request failed',
+    }));
+  }
+  return event;
+}
 
 /**
  * @param {import('@sentry/node').Event} event
@@ -10,6 +39,7 @@ let _errors;
  */
 const beforeSend = function (event, hint) {
   try {
+    event = sanitizeOidcEvent(event);
     const errors = _errors || (_errors = require('@tryghost/errors'));
     const exception = hint.originalException;
     const code = exception?.code ?? null;
@@ -65,9 +95,8 @@ const beforeSend = function (event, hint) {
     }
     return event;
   } catch (error) {
-    // If any errors occur in beforeSend, send the original event to Sentry
-    // Better to have some information than no information
-    return event;
+    // OIDC events can contain authorization codes or tokens in provider errors.
+    return OIDC_PATH.test(event.request?.url || '') ? null : event;
   }
 };
 

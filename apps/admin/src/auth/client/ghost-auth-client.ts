@@ -14,6 +14,8 @@ import {
   useSendSessionVerification,
   useVerifySession,
 } from '@tryghost/admin-x-framework/api/session';
+import { useBrowseSite } from '@tryghost/admin-x-framework/api/site';
+import { buildOidcStartUrl, getStaffAuthentication } from '@tryghost/admin-x-framework/helpers';
 import {
   APIError,
   type ErrorResponse,
@@ -130,6 +132,7 @@ export function useGhostAuthClient(): AuthClient {
   const { mutateAsync: completeReset } = useCompletePasswordReset();
   const { mutateAsync: acceptInvitation } = useAcceptInvitation();
   const { mutateAsync: completeSetup } = useCompleteSetup();
+  const site = useBrowseSite({ defaultErrorHandler: false });
 
   return useMemo<AuthClient>(
     () => ({
@@ -152,6 +155,13 @@ export function useGhostAuthClient(): AuthClient {
             }
             return { data: null, error: toAuthError(error, translateSignIn) };
           }
+        },
+        oidc({ returnTo }) {
+          if (!site.data) {
+            throw new Error('OIDC authentication is unavailable');
+          }
+          const authentication = getStaffAuthentication(site.data.site);
+          window.location.assign(buildOidcStartUrl(authentication, returnTo));
         },
       },
       twoFactor: {
@@ -219,6 +229,7 @@ export function useGhostAuthClient(): AuthClient {
       completeSetup,
       deleteSession,
       requestReset,
+      site.data,
       sendVerification,
       verifySession,
     ],

@@ -13,6 +13,19 @@ const urlUtils = require('../../../shared/url-utils').default;
 const config = require('../../../shared/config');
 const { blogIcon } = require('../../lib/image');
 const url = require('url');
+const staffAuthPolicy = require('../staff-auth-policy');
+
+async function destroyOidcSessionIfNeeded(req, res) {
+  if (staffAuthPolicy.getStaffAuthPolicy().mode === 'password') {
+    return;
+  }
+  await expressSession.destroySession(req, res);
+  const oidc = require('../oidc').default.service;
+  const { clearTransactionCookie } = require('../oidc/transaction');
+  const path = oidc.urls?.transactionPath || `${urlUtils.getSubdir()}/ghost/auth/oidc`;
+  const adminUrl = oidc.urls?.adminUrl || urlUtils.getAdminUrl() || urlUtils.getSiteUrl();
+  clearTransactionCookie(res, path, new URL(adminUrl).protocol === 'https:');
+}
 
 // TODO: We have too many lines here, should move functions out into a utils module
 
@@ -55,7 +68,9 @@ const sessionService = createSessionService({
   getOriginOfRequest,
   getSession: expressSession.getSession,
   findUserById({ id }) {
-    return models.User.findOne({ id, status: 'active' });
+    return models.User.findOne({ id, status: 'all' }).then((user) =>
+      user && user.isActive() ? user : null,
+    );
   },
   getSettingsCache(key) {
     return settingsCache.get(key);
@@ -64,6 +79,7 @@ const sessionService = createSessionService({
     // This config flag is set to true by default, so we need to check for false
     return config.get('security:staffDeviceVerification') !== true;
   },
+  getStaffAuthPolicy: staffAuthPolicy.getStaffAuthPolicy,
   getBlogLogo() {
     return (
       blogIcon.getIconUrl({ absolute: true, fallbackToDefault: false }) ||
@@ -75,10 +91,19 @@ const sessionService = createSessionService({
   t,
 });
 
-module.exports = createSessionMiddleware({ sessionService });
+module.exports = createSessionMiddleware({
+  sessionService,
+  destroySession: destroyOidcSessionIfNeeded,
+});
 
 // Looks funky but this is a "custom" piece of middleware
 module.exports.createSessionFromToken = () => {
+  if (staffAuthPolicy.getStaffAuthPolicy().mode !== 'password') {
+    return function disabledStaffSso(_req, _res, next) {
+      next();
+    };
+  }
+
   const ssoAdapter = adapterManager.getAdapter('sso');
 
   // Provide the SSO adapter with the user lookups it needs, backed by the User
@@ -119,3 +144,4 @@ module.exports.initSession = async function initSession(req, res, next) {
 module.exports.getOriginOfRequest = getOriginOfRequest;
 module.exports.sessionService = sessionService;
 module.exports.deleteAllSessions = expressSession.deleteAllSessions;
+module.exports.destroySession = expressSession.destroySession;

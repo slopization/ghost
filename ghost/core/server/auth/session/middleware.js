@@ -1,6 +1,6 @@
 const errors = require('@tryghost/errors');
 
-function SessionMiddleware({ sessionService }) {
+function SessionMiddleware({ sessionService, destroySession }) {
   async function createSession(req, res, next) {
     try {
       if (req.skipVerification) {
@@ -32,6 +32,9 @@ function SessionMiddleware({ sessionService }) {
   async function logout(req, res, next) {
     try {
       await sessionService.removeUserForSession(req, res);
+      if (destroySession) {
+        await destroySession(req, res);
+      }
       res.sendStatus(204);
     } catch (err) {
       if (errors.utils.isGhostError(err)) {

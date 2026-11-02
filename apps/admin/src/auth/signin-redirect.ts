@@ -16,13 +16,27 @@ export function rememberSigninRedirect(route: string): void {
   }
 }
 
-/** The route to open after signing in, cleared so it is used once. */
-export function takeSigninRedirect(): string {
+/** The route to open after signing in without consuming it. */
+export function peekSigninRedirect(): string {
   try {
     const route = window.sessionStorage.getItem(SIGNIN_REDIRECT_KEY);
-    window.sessionStorage.removeItem(SIGNIN_REDIRECT_KEY);
     return isRedirectTarget(route) ? route : '/';
   } catch {
     return '/';
   }
+}
+
+export function clearSigninRedirect(): void {
+  try {
+    window.sessionStorage.removeItem(SIGNIN_REDIRECT_KEY);
+  } catch {
+    // Storage can be unavailable.
+  }
+}
+
+/** The route to open after signing in, cleared so it is used once. */
+export function takeSigninRedirect(): string {
+  const route = peekSigninRedirect();
+  clearSigninRedirect();
+  return route;
 }

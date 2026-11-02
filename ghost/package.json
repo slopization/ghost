@@ -213,6 +213,7 @@
     "node-html-markdown": "catalog:",
     "nodemailer": "catalog:",
     "on-headers": "1.1.0",
+    "openid-client": "catalog:",
     "otplib": "12.0.1",
     "papaparse": "5.5.4",
     "path-match": "1.2.4",

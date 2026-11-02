@@ -27,6 +27,8 @@ and nothing else. The contract follows the BetterAuth client:
   (`{twoFactorRedirect: true}`), with Ghost's reason as an extension field;
 - `invitation`, `setup`, `useSetupStatus`, `useInvitation` and
   `getResetTokenEmail` are Ghost extensions.
+- `signIn.oidc` redirects to the backend-provided OIDC start URL without consuming
+  the remembered destination; the signed-in app clears it after login completes.
 
 `client/ghost-auth-client.ts` implements it over Ghost's session and
 authentication endpoints (through the framework hooks, which never retry these

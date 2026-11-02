@@ -3,6 +3,7 @@ const errors = require('@tryghost/errors');
 const models = require('../../models');
 const auth = require('../../auth');
 const api = require('./index');
+const staffAuthPolicy = require('../../auth/staff-auth-policy');
 
 const messages = {
   accessDenied: 'Access Denied.',
@@ -11,6 +12,7 @@ const messages = {
 /** @type {import('@tryghost/api-framework').Controller} */
 const controller = {
   add(frame) {
+    staffAuthPolicy.assertPasswordAuthenticationAllowed();
     const object = frame.data;
 
     if (!object || !object.username || !object.password) {
@@ -77,11 +79,13 @@ const controller = {
     });
   },
   sendVerification() {
+    staffAuthPolicy.assertPasswordAuthenticationAllowed();
     return Promise.resolve(function sendAuthCodeMw(req, res, next) {
       auth.session.sendAuthCode(req, res, next);
     });
   },
   verify() {
+    staffAuthPolicy.assertPasswordAuthenticationAllowed();
     return Promise.resolve(function verifyAuthCodeMw(req, res, next) {
       auth.session.verifyAuthCode(req, res, next);
     });
